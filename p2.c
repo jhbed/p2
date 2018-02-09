@@ -6,46 +6,62 @@
 #include <unistd.h>
 
 /*GLOBAL*/
+/*an array of pointers (addresses for chars)*/
 char *newargv[MAXITEM];
+char w[STORAGE*MAXITEM];
 
-/*parse accepts parameter that points
- to a memory location */
+
+
+
+int main(){
+	
+	int words;
+
+	for(;;) {
+		//this will exit the program because you don't start a child process!!!
+		words = parse();
+		if (words == 0) break;
+		execvp(newargv[0], newargv);
+	}
+	return 0;
+}
+
+
+
+/*
+parse()
+ - calls getword.c over and over until the
+	whole input stream is done
+ - puts words in a buffer
+ - puts the addresses to those words
+   in newargv[0], 1, 2 etc until there
+   are no more words
+*/ 
 int parse(){
 
-	char w[STORAGE*MAXITEM];
-	char *slot;
-	int word_count = 0;
-	int c;
-	int word_size;
-	int arg = 0;
+	int c; //will be the return val of getword() (size of word)
+	int word_size; //will be used to decide moveForward (seen below)
+
+
+	int word_count = 0; 
+	int index = 0; //what index we are on in newargv[]
+	int moveForward = 0; //how many spots to move forward in buffer
+	
+	
 
 	//address of slot = address of w
-	slot = w;
-	/*
-	What does parse do?
-	 - calls getword.c over and over until the
-		whole input stream is done
-	 - puts words in a buffer stream (done)
-	 - puts the addresses to those words
-	   in newargv[0], 1, 2 etc until there
-	   are no more words
-	*/ 
+	//memory slot = slot w
+
 	/*pass memory location slots to getword */
-	while((c = getword(slot)) != -10){
+	while((c = getword(w + moveForward)) != -10){
 		if (c == 0) break;
-		word_count++;
+
+		newargv[index] = w + moveForward; //set newargv[index] = address of start of word
+		index++; 
 		word_size = abs(c);
-		/*the value of newargv slot 0 is the address of 
-		the first word*/
+		moveForward += word_size + 1;
+		word_count++;
 
-		//add the current words memory location
-		// to newargv
-		newargv[arg] = *slot;
-		arg++;
-
-		/*increment the slot
-		that gets passed to getword*/
-		slot = slot + word_size + 1;
 	}
 
 
@@ -53,24 +69,3 @@ int parse(){
 }
 
 
-
-int main(int argc, char *argv[]){
-	/* a pointer to a location in memory that 
-	stores chars */
-	int words;
-	/*a pointer to a location in memory 
-	that stores POINTERS to chars 
-	AN ARRAY OF ADDRESSES*/
-	
-
-
-	for(;;) {
-		//
-		words = parse(*newargv);
-		execv(newargv[0], newargv);
-		if (words == 0) break;
-
-	}
-
-	return 0;
-}
