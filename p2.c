@@ -28,22 +28,20 @@ char w[STORAGE*MAXITEM];
 
 int main(){
 	
-	int words;
+	int words; //the amount of words returned from parse()
 	int kidpid; //variable used to designate the child
 
 	for(;;) {
-		//this will exit the program because you don't start a child process!!!
 		printf("p2: ");
 		words = parse();
 		
-		if (words == -10) break;
-		// execvp(newargv[0], newargv);
+		//if (words == EOF) exit(0);
 		if(-1 == (kidpid = (int) fork())){ //if fork returns -1 it failed
 			perror("Fork unsuccessful");
 			exit(EXIT_FAILURE);
 		} else if (0 == kidpid) { // if fork returns 0 that means we are the child
 			
-			// INSERT THINGS WE WANT THE CHILD TO DO
+			//will this always be 
 			execvp(newargv[0], newargv);
 			perror("execve");   /* execve() returns only on error */
             exit(EXIT_FAILURE);
@@ -51,11 +49,12 @@ int main(){
 		} else { // WE ARE THE PARENT, we return the PID of the child we created...
 
 			wait(NULL);
-			
+			kill((int) kidpid, SIGTERM);
 			//exit(EXIT_SUCCESS);
 		}
 	}
-	kill(getpid(), SIGTERM);
+	//kill(getpid(), SIGTERM);
+	printf("made it to bottom of main\n");
 	return 0;
 }
 
@@ -86,7 +85,10 @@ int parse(){
 
 	/*pass memory location slots to getword */
 	//if getword returns &, EOF, or newline we want to stop getting words and execute
-	while((c = getword(w + moveForward)) > 0){
+	while((c = getword(w + moveForward)) != -10){
+
+		if(c == EOF && word_count == 0)
+			return EOF;
 
 		newargv[index] = w + moveForward; //set newargv[index] = address of start of word
 		index++; 
@@ -96,7 +98,7 @@ int parse(){
 
 	}
 
-
+	newargv[index] = '\0';
 	return word_count;
 }
 
