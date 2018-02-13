@@ -27,11 +27,12 @@ char w[STORAGE*MAXITEM];
 
 
 int main(){
-	
 	int words; //the amount of words returned from parse()
 	int kidpid; //variable used to designate the child
+	int save_stdout;
 
 	for(;;) {
+		save_stdout = dup(STDOUT_FILENO);
 		printf("p2: ");
 		words = parse();
 		
@@ -50,6 +51,9 @@ int main(){
 
 			wait(NULL);
 			kill((int) kidpid, SIGTERM);
+			dup2(save_stdout, 1);
+			close(save_stdout);
+
 			//exit(EXIT_SUCCESS);
 		}
 	}
@@ -73,7 +77,6 @@ int parse(){
 	int c; //will be the return val of getword() (size of word)
 	int word_size; //will be used to decide moveForward (seen below)
 
-
 	int word_count = 0; 
 	int index = 0; //what index we are on in newargv[]
 	int moveForward = 0; //how many spots to move forward in buffer
@@ -87,6 +90,22 @@ int parse(){
 	//if getword returns &, EOF, or newline we want to stop getting words and execute
 	while((c = getword(w + moveForward)) != -10){
 
+		
+/* ----------- REDIRECT FILE LOGIC ------------------- */
+/*
+CURRENT BUG: IN THE '>' LOGIC THE STREAMS ARE OVERWRITING 
+EACH OTHER! TRY echo hi > test2 then echo > test3 hello my name is jake
+
+*/
+		if(*(w + moveForward) == '>'){
+			moveForward += 2;
+			c = getword(w + moveForward);
+			openFile(c, (w+moveForward));
+			moveForward += abs(c) + 1;
+			//break;
+
+		}
+
 		if(c == EOF && word_count == 0)
 			return EOF;
 
@@ -98,8 +117,43 @@ int parse(){
 
 	}
 
-	newargv[index] = '\0';
+	newargv[index] = '\0'; 
 	return word_count;
 }
 
+int openFile(int nameLength, char *locOfWord){
+	
+	int dup_result;
+	int close_result;
+	int output_fd; //open() output - filedesc. array index
+
+	int flags;
+	int mode;
+
+	flags = O_CREAT | O_WRONLY; //if the file doesn't exist, create it
+	mode = S_IRUSR | S_IWUSR; //mode is read write	
+
+	char *filename = locOfWord;
+
+	if((output_fd=open(filename, flags, mode)) < 0){
+		printf("File failed: %s\n", filename);
+		perror("open failed: ");
+		exit(1);
+	}
+
+	if((dup_result = dup2(output_fd, STDOUT_FILENO)) < 0){
+		perror("dup2 Error: ");
+		exit(1);
+	}
+
+	//free(filename);
+
+	if((close_result = close(output_fd)) < 0){
+		perror("Close Error: ");
+		exit(1);
+	} else {
+		return close_result;
+	}
+
+}
 
