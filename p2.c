@@ -7,23 +7,14 @@
 /*an array of pointers (addresses for chars)*/
 char *newargv[MAXITEM];
 char w[STORAGE*MAXITEM];
+int moveForward = 0;  //how many spots to move forward in buffer
+int c; //will be the return val of getword() (size of word)
 
-
-// FUNCTIONAL MAIN - IF ALL ELSE FAILS REVERT BACK TO THIS
-
-// int main(){
-	
-// 	int words;
-
-// 	for(;;) {
-// 		//this will exit the program because you don't start a child process!!!
-// 		words = parse();
-// 		if (words == 0) break;
-// 		execvp(newargv[0], newargv);
-// 	}
-// 	return 0;
-// }
-
+/*DECLARE FLAGS*/
+int flag_out = 0; //will be switched to 1 if '>' encountered
+char *outfile; //will eventually point to a position in our buffer if an outfile is established
+int flag_in = 0; //will be switched to 1 if '<' encountered
+char *infile;//will eventually point to a position in our buffer if an infile is established
 
 
 int main(){
@@ -41,7 +32,14 @@ int main(){
 	for(;;) {
 		save_stdout = dup(STDOUT_FILENO);
 		printf("p2: ");
-		words = parse();
+		words = parse();	
+
+		if(flag_out == 1){
+		
+			openFile(outfile);
+			
+		}
+			
 
 
 /*----------LOGIC FOR WHEN WE GET EOF && 0 WORDS FROM PARSE-----------------*/		
@@ -93,12 +91,12 @@ parse()
 */ 
 int parse(){
 
-	int c; //will be the return val of getword() (size of word)
+	
 	int word_size; //will be used to decide moveForward (seen below)
 
 	int word_count = 0; 
 	int index = 0; //what index we are on in newargv[]
-	int moveForward = 0; //how many spots to move forward in buffer
+	
 	
 	
 
@@ -117,14 +115,17 @@ EACH OTHER! TRY echo hi > test2 then echo > test3 hello my name is jake
 
 */
 		if(*(w + moveForward) == '>'){
-			moveForward += 2;
-			//this is probably where the error occurs, you are getting a word
-			//in a weird spot!
-			c = getword(w + moveForward);
-			openFile(c, (w+moveForward));
-			moveForward += abs(c) + 1;
-			//break;
+			flag_out = 1;
+			moveForward+=2;
+			//we want the next word we get to BE the name of the file
+			c = getword(w + moveForward); //get the next word
+			outfile = (w + moveForward); // set outfile to location in buffer
 
+			//move along in the buffer without putting the word in newargv!!!
+			word_size = abs(c);
+			moveForward += word_size + 1;
+			word_count++;
+			continue;
 		}
 
 		if(c == 0 && word_count == 0){
@@ -144,7 +145,7 @@ EACH OTHER! TRY echo hi > test2 then echo > test3 hello my name is jake
 	return word_count;
 }
 
-int openFile(int nameLength, char *locOfWord){
+int openFile(char *locOfWord){
 	
 	int dup_result;
 	int close_result;

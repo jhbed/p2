@@ -14,4 +14,4 @@
 
 #define MAXITEM 100 /*max number of words per line*/
 int parse();
-int openFile(int nameLength, char *locOfWord);
+int openFile(char *locOfWord);
