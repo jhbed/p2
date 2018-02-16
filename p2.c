@@ -3,7 +3,7 @@
 #include "p2.h"
 
 
-/*GLOBAL*/
+/*GLOBALS*/
 /*an array of pointers (addresses for chars)*/
 char *newargv[MAXITEM];
 char w[STORAGE*MAXITEM];
@@ -17,6 +17,10 @@ int flag_in = 0; //will be switched to 1 if '<' encountered
 char *infile;//will eventually point to a position in our buffer if an infile is established
 
 
+
+void myHandler(){}
+
+
 int main(){
 	int words; //the amount of words returned from parse()
 	pid_t kidpid; //variable used to designate the child
@@ -25,9 +29,8 @@ int main(){
 
 
 /*---------------------INIT GROUPPD & SIGNAL HANDLER---------------*/
-
-
-
+	(void) setpgid(0, 0);
+	signal(SIGTERM, myHandler);
 /*-----------------------------------------------------------------*/
 
 	for(;;) {
@@ -50,10 +53,10 @@ int main(){
 
 
 /*----------LOGIC FOR WHEN WE GET EOF && 0 WORDS FROM PARSE-----------------*/		
-	// if(words == EOF){
-	// 	//kill(grouppd, SIGTERM)
-	//	break;
-	// }
+		if(words == EOF){
+			kill(getpgrp(), SIGTERM);
+			break;
+		}
 
 
 		//need to communicated EOF to main here, not just end at parse()
@@ -71,10 +74,19 @@ int main(){
 
 		} else { // WE ARE THE PARENT, we return the PID of the child we created...
 
-			wait(NULL); // this should be in a loop see page 6
+			//wait(NULL); // this should be in a loop see page 6
 
-/*-------------REMOVE THE KILL STATEMENT BELOW EVENTUALLY------------------------*/
-			kill((int) kidpid, SIGTERM); //I don't think this is what he wants, may have to adjust this logic!!
+			for(;;){
+				pid_t dead_child;
+				dead_child = wait(NULL);
+				if (dead_child == kidpid)
+				{
+					break;
+				}
+			}
+
+
+
 			dup2(save_stdout, 1);
 			dup2(save_stdin, 0);
 			close(save_stdin);
@@ -84,7 +96,7 @@ int main(){
 		}
 	}
 	//kill(getpid(), SIGTERM);
-	printf("made it to bottom of main\n");
+	printf("\np2 Terminated\n");
 	return 0;
 }
 
@@ -105,12 +117,6 @@ int parse(){
 
 	int word_count = 0; 
 	int index = 0; //what index we are on in newargv[]
-	
-	
-	
-
-	//address of slot = address of w
-	//memory slot = slot w
 
 	/*pass memory location slots to getword */
 	//if getword returns &, EOF, or newline we want to stop getting words and execute
@@ -118,11 +124,6 @@ int parse(){
 
 		
 /* ----------- REDIRECT FILE LOGIC ------------------- */
-/*
-CURRENT BUG: IN THE '>' LOGIC THE STREAMS ARE OVERWRITING 
-EACH OTHER! TRY echo hi > test2 then echo > test3 hello my name is jake
-
-*/
 		if(*(w + moveForward) == '>' || *(w + moveForward) == '<'){
 			if(*(w + moveForward) == '>'){
 				moveForward+=2;
@@ -134,20 +135,17 @@ EACH OTHER! TRY echo hi > test2 then echo > test3 hello my name is jake
 				flag_in = 1;
 				c = getword(w + moveForward); //get the next word
 				infile = (w + moveForward); // set infile to location in buffer 
-			}
-			
-			
-			
-
+			}			
 			//move along in the buffer without putting the word in newargv!!!
 			word_size = abs(c);
 			moveForward += word_size + 1;
 			word_count++;
 			continue;
 		}
+/* ----------- END REDIRECT FILE LOGIC ------------------- */
 
 		if(c == 0 && word_count == 0){
-			printf("\np2 Terminated\n");
+			
 			return EOF;
 		}
 
@@ -183,7 +181,7 @@ int openFile(char *locOfWord, char inOrOut){
 		perror("open failed: ");
 		exit(1);
 	}
-	
+
 	if(inOrOut == 'o'){
 		if((dup_result = dup2(output_fd, STDOUT_FILENO)) < 0){
 			perror("dup2 Error: ");
@@ -195,8 +193,6 @@ int openFile(char *locOfWord, char inOrOut){
 			exit(1);
 		}
 	}
-
-	//free(filename);
 
 	if((close_result = close(output_fd)) < 0){
 		perror("Close Error: ");
