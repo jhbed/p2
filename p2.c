@@ -21,6 +21,7 @@ int main(){
 	int words; //the amount of words returned from parse()
 	pid_t kidpid; //variable used to designate the child
 	int save_stdout;
+	int save_stdin;
 
 
 /*---------------------INIT GROUPPD & SIGNAL HANDLER---------------*/
@@ -31,13 +32,19 @@ int main(){
 
 	for(;;) {
 		save_stdout = dup(STDOUT_FILENO);
+		save_stdin = dup(STDIN_FILENO);
 		printf("p2: ");
 		words = parse();	
 
 		if(flag_out == 1){
 		
-			openFile(outfile);
-			
+			openFile(outfile, 'o');
+			flag_out = 0;
+		}
+		if(flag_in == 1){
+		
+			openFile(infile, 'i');
+			flag_in = 0;
 		}
 			
 
@@ -69,6 +76,8 @@ int main(){
 /*-------------REMOVE THE KILL STATEMENT BELOW EVENTUALLY------------------------*/
 			kill((int) kidpid, SIGTERM); //I don't think this is what he wants, may have to adjust this logic!!
 			dup2(save_stdout, 1);
+			dup2(save_stdin, 0);
+			close(save_stdin);
 			close(save_stdout);
 
 			//exit(EXIT_SUCCESS);
@@ -114,12 +123,21 @@ CURRENT BUG: IN THE '>' LOGIC THE STREAMS ARE OVERWRITING
 EACH OTHER! TRY echo hi > test2 then echo > test3 hello my name is jake
 
 */
-		if(*(w + moveForward) == '>'){
-			flag_out = 1;
-			moveForward+=2;
-			//we want the next word we get to BE the name of the file
-			c = getword(w + moveForward); //get the next word
-			outfile = (w + moveForward); // set outfile to location in buffer
+		if(*(w + moveForward) == '>' || *(w + moveForward) == '<'){
+			if(*(w + moveForward) == '>'){
+				moveForward+=2;
+				flag_out = 1;
+				c = getword(w + moveForward); //get the next word
+				outfile = (w + moveForward); // set outfile to location in buffer 
+			} else{
+				moveForward+=2;
+				flag_in = 1;
+				c = getword(w + moveForward); //get the next word
+				infile = (w + moveForward); // set infile to location in buffer 
+			}
+			
+			
+			
 
 			//move along in the buffer without putting the word in newargv!!!
 			word_size = abs(c);
@@ -144,8 +162,9 @@ EACH OTHER! TRY echo hi > test2 then echo > test3 hello my name is jake
 	newargv[index] = '\0'; 
 	return word_count;
 }
-
-int openFile(char *locOfWord){
+// locOfWord is the location of the name of the file
+// inOrout = i if in, o if out
+int openFile(char *locOfWord, char inOrOut){
 	
 	int dup_result;
 	int close_result;
@@ -154,7 +173,7 @@ int openFile(char *locOfWord){
 	int flags;
 	int mode;
 
-	flags = O_CREAT | O_WRONLY; //if the file doesn't exist, create it
+	flags = O_CREAT | O_RDWR; //if the file doesn't exist, create it
 	mode = S_IRUSR | S_IWUSR; //mode is read write	
 
 	char *filename = locOfWord;
@@ -164,10 +183,17 @@ int openFile(char *locOfWord){
 		perror("open failed: ");
 		exit(1);
 	}
-
-	if((dup_result = dup2(output_fd, STDOUT_FILENO)) < 0){
-		perror("dup2 Error: ");
-		exit(1);
+	
+	if(inOrOut == 'o'){
+		if((dup_result = dup2(output_fd, STDOUT_FILENO)) < 0){
+			perror("dup2 Error: ");
+			exit(1);
+		}
+	} else {
+		if((dup_result = dup2(output_fd, STDIN_FILENO)) < 0){
+			perror("dup2 Error: ");
+			exit(1);
+		}
 	}
 
 	//free(filename);
