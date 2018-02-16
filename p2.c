@@ -28,16 +28,33 @@ char w[STORAGE*MAXITEM];
 
 int main(){
 	int words; //the amount of words returned from parse()
-	int kidpid; //variable used to designate the child
+	pid_t kidpid; //variable used to designate the child
 	int save_stdout;
+
+
+/*---------------------INIT GROUPPD & SIGNAL HANDLER---------------*/
+
+
+
+/*-----------------------------------------------------------------*/
 
 	for(;;) {
 		save_stdout = dup(STDOUT_FILENO);
 		printf("p2: ");
 		words = parse();
+
+
+/*----------LOGIC FOR WHEN WE GET EOF && 0 WORDS FROM PARSE-----------------*/		
+	// if(words == EOF){
+	// 	//kill(grouppd, SIGTERM)
+	//	break;
+	// }
+
+
+		//need to communicated EOF to main here, not just end at parse()
 		
 		//if (words == EOF) exit(0);
-		if(-1 == (kidpid = (int) fork())){ //if fork returns -1 it failed
+		if(-1 == (kidpid = fork())){ //if fork returns -1 it failed
 			perror("Fork unsuccessful");
 			exit(EXIT_FAILURE);
 		} else if (0 == kidpid) { // if fork returns 0 that means we are the child
@@ -49,8 +66,10 @@ int main(){
 
 		} else { // WE ARE THE PARENT, we return the PID of the child we created...
 
-			wait(NULL);
-			kill((int) kidpid, SIGTERM);
+			wait(NULL); // this should be in a loop see page 6
+
+/*-------------REMOVE THE KILL STATEMENT BELOW EVENTUALLY------------------------*/
+			kill((int) kidpid, SIGTERM); //I don't think this is what he wants, may have to adjust this logic!!
 			dup2(save_stdout, 1);
 			close(save_stdout);
 
@@ -99,6 +118,8 @@ EACH OTHER! TRY echo hi > test2 then echo > test3 hello my name is jake
 */
 		if(*(w + moveForward) == '>'){
 			moveForward += 2;
+			//this is probably where the error occurs, you are getting a word
+			//in a weird spot!
 			c = getword(w + moveForward);
 			openFile(c, (w+moveForward));
 			moveForward += abs(c) + 1;
@@ -106,8 +127,10 @@ EACH OTHER! TRY echo hi > test2 then echo > test3 hello my name is jake
 
 		}
 
-		if(c == EOF && word_count == 0)
+		if(c == 0 && word_count == 0){
+			printf("\np2 Terminated\n");
 			return EOF;
+		}
 
 		newargv[index] = w + moveForward; //set newargv[index] = address of start of word
 		index++; 
