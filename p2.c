@@ -11,6 +11,12 @@ int moveForward = 0;  //how many spots to move forward in buffer
 int c; //will be the return val of getword() (size of word)
 
 /*DECLARE FLAGS*/
+
+/*unlike the other flags, pipe flag can
+be changed to any integer, and will mark the index
+of newargv that is after the pipe
+*/
+int flag_pipe = 0;
 int flag_out = 0; //will be switched to 1 if '>' encountered
 char *outfile; //will eventually point to a position in our buffer if an outfile is established
 int flag_in = 0; //will be switched to 1 if '<' encountered
@@ -39,6 +45,8 @@ int main(){
 		printf("p2: ");
 		words = parse();	
 
+/*----------------------CHECK FOR FLAGS --------------------------*/		
+
 		if(flag_out == 1){
 		
 			openFile(outfile, 'o');
@@ -51,17 +59,22 @@ int main(){
 		}
 			
 
+		if (flag_pipe != 0) {
+		    (void) startPipe(flag_pipe);
+		    flag_pipe = 0;
+		    continue; //SKIP FORK EXEC IN MAIN SINCE WE DO IT IN startPipe()
+		}
 
-/*----------LOGIC FOR WHEN WE GET EOF && 0 WORDS FROM PARSE-----------------*/		
+
+
 		if(words == EOF){
 			kill(getpgrp(), SIGTERM);
 			break;
 		}
+/*----------------------END CHECK FOR FLAGS ----------------------*/
 
-
-		//need to communicated EOF to main here, not just end at parse()
 		
-		//if (words == EOF) exit(0);
+/*------------------BEGIN FORK/EXEC PROCESS ----------------------*/
 		if(-1 == (kidpid = fork())){ //if fork returns -1 it failed
 			perror("Fork unsuccessful");
 			exit(EXIT_FAILURE);
@@ -144,8 +157,16 @@ int parse(){
 		}
 /* ----------- END REDIRECT FILE LOGIC ------------------- */
 
+/* ------------------- PIPE LOGIC ------------------------ */
+		if(*(w + moveForward) == '|'){
+			moveForward+=2;
+			flag_pipe = index;
+			continue;
+		}
+/* ------------------- END PIPE LOGIC -------------------- */
+
+
 		if(c == 0 && word_count == 0){
-			
 			return EOF;
 		}
 
@@ -202,4 +223,87 @@ int openFile(char *locOfWord, char inOrOut){
 	}
 
 }
+
+
+/*
+startPipe(int index)
+ - recieves an index, which is the index in newargv that contains
+   the word after the '|'
+ - this function also forks a child and a grandchild and runs the 
+ pipe() system call.
+ 
+*/
+int startPipe(int index){ //index designates the arg after the '|'
+
+    int pipe_result;
+    int filedes[2];
+    pid_t child;
+    pid_t gc; //grand child
+    int dup2_result;
+    char *arg_loc;
+
+
+    if((child = fork()) < 0)
+    	perror("1st Fork Failure: ");
+ 
+
+    else if(child == 0) { //child
+        //start pipe
+        //filedes[1] is write to pipe
+        //filedes[0] is read from pipe (think like reading from stdin)
+        if ((pipe_result = pipe(filedes)) < 0) {
+            perror("Pipe Failed: ");
+            exit(2);
+        } 
+
+       
+
+        if((gc = fork()) == 0){ //I am the grandchild
+        	//writes to pipe
+            //grandchild WRITES TO PIPE
+            dup2(filedes[1], STDOUT_FILENO); //put WRITE in STDOUT
+            //child does not want crap sent by fd[1], only stuff coming from pipe
+            close(filedes[0]);
+            close(filedes[1]);
+           // printf("Executing 1st, should be sort: %s\n", newargv[0]);
+            newargv[index] = NULL;
+            execvp(newargv[0], newargv);
+
+            perror("exec 1 ");
+
+        } else { // parent - do not wait
+            //parent is reading from PIPE
+            dup2(filedes[0], STDIN_FILENO); //PUT READ IN STDIN
+            //parent doesn't want to have a conflict on the back end
+            close(filedes[0]);
+            close(filedes[1]);
+            //execute the thing that will be reading from pipe
+            //printf("Executing 2nd, should be tr: %s\n", newargv[2]);
+
+            
+            //printf("executing 2nd, should be tr %s\n", newargv[index]);
+
+            execvp(newargv[index], newargv+index);
+            perror("exec 2 ");
+            //execvp(filedes[1])
+            //doing something with the WRITE side of pipe
+
+        }
+
+
+    } else { //grandparent
+
+        
+        for (;;) {
+            pid_t dead_c;
+            if ((dead_c = wait(NULL)) == child) {
+                break;
+            }
+        }
+    }
+    return 0;
+
+}
+
+
 

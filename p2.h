@@ -15,3 +15,4 @@
 #define MAXITEM 100 /*max number of words per line*/
 int parse();
 int openFile(char *locOfWord, char inOrOut);
+int startPipe(int index);
