@@ -20,6 +20,7 @@ int flag_pipe = 0;
 int flag_out = 0; //will be switched to 1 if '>' encountered
 char *outfile; //will eventually point to a position in our buffer if an outfile is established
 int flag_in = 0; //will be switched to 1 if '<' encountered
+int flag_hashtag = 0;
 char *infile;//will eventually point to a position in our buffer if an infile is established
 
 
@@ -32,6 +33,8 @@ int main(){
 	pid_t kidpid; //variable used to designate the child
 	int save_stdout;
 	int save_stdin;
+	char *home;
+	home = getenv("HOME");
 
 
 /*---------------------INIT GROUPPD & SIGNAL HANDLER---------------*/
@@ -46,19 +49,21 @@ int main(){
 		words = parse();	
 
 /*----------------------CHECK FOR FLAGS --------------------------*/		
-
+		//out flag
 		if(flag_out == 1){
 		
 			openFile(outfile, 'o');
 			flag_out = 0;
 		}
+
+		//in flag
 		if(flag_in == 1){
 		
 			openFile(infile, 'i');
 			flag_in = 0;
 		}
 			
-
+		//pipe
 		if (flag_pipe != 0) {
 		    (void) startPipe(flag_pipe);
 		    flag_pipe = 0;
@@ -66,10 +71,32 @@ int main(){
 		}
 
 
-
+		//EOF and no words
 		if(words == EOF){
 			kill(getpgrp(), SIGTERM);
 			break;
+		}
+
+		//newline or hashtag
+		if(flag_hashtag > 0 || words == 0){
+			flag_hashtag = 0;
+			continue;
+		}
+
+			
+
+		//cd logic
+		if(strcmp(newargv[0], "cd") == 0){
+			if(newargv[1] == NULL){
+				chdir(home);
+			} else if(newargv[2] != NULL){
+				printf("cd error: Too many arguments\n");
+			} else {
+				chdir(newargv[1]);
+				newargv[1] = NULL;
+			}
+
+			continue;
 		}
 /*----------------------END CHECK FOR FLAGS ----------------------*/
 
@@ -80,14 +107,12 @@ int main(){
 			exit(EXIT_FAILURE);
 		} else if (0 == kidpid) { // if fork returns 0 that means we are the child
 			
-			//will this always be 
 			execvp(newargv[0], newargv);
 			perror("execve");   /* execve() returns only on error */
             exit(EXIT_FAILURE);
 
 		} else { // WE ARE THE PARENT, we return the PID of the child we created...
 
-			//wait(NULL); // this should be in a loop see page 6
 
 			for(;;){
 				pid_t dead_child;
@@ -125,6 +150,11 @@ parse()
 */ 
 int parse(){
 
+	//reset w and moveForward
+	memset(w, 0, (STORAGE*MAXITEM));
+	//memset(newargv, 0, (MAXITEM));
+	moveForward = 0;
+
 	
 	int word_size; //will be used to decide moveForward (seen below)
 
@@ -134,6 +164,12 @@ int parse(){
 	/*pass memory location slots to getword */
 	//if getword returns &, EOF, or newline we want to stop getting words and execute
 	while((c = getword(w + moveForward)) != -10){
+
+		if(*(w + moveForward) == '#' && word_count == 0){
+			flag_hashtag = 1;
+			moveForward+=2;
+			continue;
+		}
 
 		
 /* ----------- REDIRECT FILE LOGIC ------------------- */
@@ -261,7 +297,7 @@ int startPipe(int index){ //index designates the arg after the '|'
         if((gc = fork()) == 0){ //I am the grandchild
         	//writes to pipe
             //grandchild WRITES TO PIPE
-            dup2(filedes[1], STDOUT_FILENO); //put WRITE in STDOUT
+            dup2(filedes[1], STDOUT_FILENO); //put STDOUT IN WRITE side of pipe
             //child does not want crap sent by fd[1], only stuff coming from pipe
             close(filedes[0]);
             close(filedes[1]);
@@ -273,7 +309,7 @@ int startPipe(int index){ //index designates the arg after the '|'
 
         } else { // parent - do not wait
             //parent is reading from PIPE
-            dup2(filedes[0], STDIN_FILENO); //PUT READ IN STDIN
+            dup2(filedes[0], STDIN_FILENO); //PUT STDIN IN READ side of pipe
             //parent doesn't want to have a conflict on the back end
             close(filedes[0]);
             close(filedes[1]);
