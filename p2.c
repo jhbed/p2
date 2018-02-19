@@ -39,6 +39,8 @@ int flag_in = 0; //will be switched to 1 if '<' encountered
 int flag_hashtag = 0;
 char *infile;//will eventually point to a position in our buffer if an infile is established
 pid_t dead_child;
+int save_stdout;
+int save_stdin;
 
 
 
@@ -48,10 +50,11 @@ void myHandler(){}
 int main(){
 	int words; //the amount of words returned from parse()
 	pid_t kidpid; //variable used to designate the child
-	int save_stdout;
-	int save_stdin;
 	char *home;
 	home = getenv("HOME");
+
+	
+
 
 
 /*---------------------INIT GROUPPD & SIGNAL HANDLER---------------*/
@@ -60,10 +63,14 @@ int main(){
 /*-----------------------------------------------------------------*/
 
 	for(;;) {
+
+
+        //ask carroll why these have to be in here!!!
 		save_stdout = dup(STDOUT_FILENO);
 		save_stdin = dup(STDIN_FILENO);
+		
+		memset(w, 0, (STORAGE*MAXITEM));
 		printf("p2: ");
-
 		words = parse();	
 
 /*----------------------CHECK FOR FLAGS --------------------------*/		
@@ -170,19 +177,18 @@ int main(){
 					break;
 				}
 			}
+			(void) dup2(save_stdin, 0); 
+			(void) dup2(save_stdout, 1); 
+			(void) close(save_stdout);
+			(void) close(save_stdin);
+			fflush(stdout);
 
-
-
-			dup2(save_stdout, 1);
-			dup2(save_stdin, 0);
-			close(save_stdin);
-			close(save_stdout);
 
 			//exit(EXIT_SUCCESS);
 		}
 	}
 	//kill(getpid(), SIGTERM);
-	printf("p2 Terminated\n");
+	printf("p2 terminated.\n");
 	return 0;
 }
 
@@ -203,7 +209,7 @@ int parse(){
 	int index = 0; //what index we are on in newargv[]
 
 	//reset w and moveForward
-	memset(w, 0, (STORAGE*MAXITEM));
+	
 	//memset(newargv, 0, (MAXITEM));
 	moveForward = 0;
 
@@ -287,23 +293,30 @@ int openFile(char *locOfWord, char inOrOut){
 	int mode;
 	char *filename = locOfWord;
 
-	flags = O_CREAT | O_RDWR; //if the file doesn't exist, create it
-	mode = S_IRUSR | S_IWUSR; //mode is read write	
+	mode = S_IRUSR | S_IRGRP | S_IROTH;//mode is read write		
 
 	
 
-	if((output_fd=open(filename, flags, mode)) < 0){
-		printf("File failed: %s\n", filename);
-		perror("open failed: ");
-		exit(1);
-	}
+
 
 	if(inOrOut == 'o'){
+		flags = O_CREAT | O_WRONLY;
+		if((output_fd=open(filename, flags, mode)) < 0){
+			printf("File failed: %s\n", filename);
+			perror("open failed: ");
+			exit(1);
+		}
 		if((dup_result = dup2(output_fd, STDOUT_FILENO)) < 0){
 			perror("dup2 Error: ");
 			exit(1);
 		}
 	} else {
+		flags = O_CREAT | O_RDONLY;
+		if((output_fd=open(filename, flags, mode)) < 0){
+			printf("File failed: %s\n", filename);
+			perror("open failed: ");
+			exit(1);
+		}
 		if((dup_result = dup2(output_fd, STDIN_FILENO)) < 0){
 			perror("dup2 Error: ");
 			exit(1);
@@ -314,6 +327,7 @@ int openFile(char *locOfWord, char inOrOut){
 		perror("Close Error: ");
 		exit(1);
 	} else {
+
 		return close_result;
 	}
 
@@ -338,11 +352,10 @@ int startPipe(int index){ //index designates the arg after the '|'
     char *arg_loc;
 
 
-    if((child = fork()) < 0)
-    	perror("1st Fork Failure: ");
- 
+    if((child = fork()) < 0){
 
-    else if(child == 0) { //child
+    	perror("1st Fork Failure: ");
+    } else if(child == 0) { //child
         //start pipe
         //filedes[1] is write to pipe
         //filedes[0] is read from pipe (think like reading from stdin)
@@ -395,7 +408,12 @@ int startPipe(int index){ //index designates the arg after the '|'
                 break;
             }
         }
+
     }
+    (void) dup2(save_stdin, 0); 
+    (void) dup2(save_stdout, 1); 
+    (void) close(save_stdout);
+    (void) close(save_stdin);
     return 0;
 
 }
