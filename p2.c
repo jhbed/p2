@@ -1,3 +1,18 @@
+/*
+Project 2
+Jake Bedard
+Carroll
+CS570
+Due Date: February 28, 2018
+
+This file contains 4 functions:
+ - main() - implements below functions to create an interactive shell
+ - parse() - runs getword over and over, adding words to buffer and correct arguments to newargv
+ - openFile() - opens a file, runs dup2 to redirect stdin or stdout
+ - startPipe() - performs necessary pipeline operations when '|' is encountered
+  
+*/
+
 /*Includes two functions: parse() and main()*/
 
 #include "p2.h"
@@ -16,12 +31,14 @@ int c; //will be the return val of getword() (size of word)
 be changed to any integer, and will mark the index
 of newargv that is after the pipe
 */
+int flag_amp = 0;
 int flag_pipe = 0;
 int flag_out = 0; //will be switched to 1 if '>' encountered
 char *outfile; //will eventually point to a position in our buffer if an outfile is established
 int flag_in = 0; //will be switched to 1 if '<' encountered
 int flag_hashtag = 0;
 char *infile;//will eventually point to a position in our buffer if an infile is established
+pid_t dead_child;
 
 
 
@@ -39,13 +56,14 @@ int main(){
 
 /*---------------------INIT GROUPPD & SIGNAL HANDLER---------------*/
 	(void) setpgid(0, 0);
-	signal(SIGTERM, myHandler);
+	(void) signal(SIGTERM, myHandler);
 /*-----------------------------------------------------------------*/
 
 	for(;;) {
 		save_stdout = dup(STDOUT_FILENO);
 		save_stdin = dup(STDIN_FILENO);
 		printf("p2: ");
+
 		words = parse();	
 
 /*----------------------CHECK FOR FLAGS --------------------------*/		
@@ -70,10 +88,41 @@ int main(){
 		    continue; //SKIP FORK EXEC IN MAIN SINCE WE DO IT IN startPipe()
 		}
 
+		if(flag_amp != 0){
+			//AMP LOGIC
+			//(void) fflush(stdout);
+			if(-1 == (kidpid = fork())){ //if fork returns -1 it failed
+				perror("& Fork unsuccessful");
+				exit(EXIT_FAILURE);
+
+			} else if(kidpid == 0) { //CHILD
+				//(void) fflush(stdout);
+				execvp(newargv[0], newargv);
+				perror("execvp error with & process: ");   /* execve() returns only on error */
+				exit(EXIT_FAILURE);
+
+			} else { //PARENT
+				//this is getting printed when it should not be getting printed
+				// for(;;){
+					
+				// 	dead_child = wait(NULL);
+				// 	if (dead_child == kidpid)
+				// 	{
+				// 		break;
+				// 	}
+				// }
+				printf("%s [%d]\n", newargv[0], kidpid);
+
+
+			}
+			flag_amp = 0;
+			continue;
+		}
+
 
 		//EOF and no words
 		if(words == EOF){
-			kill(getpgrp(), SIGTERM);
+			killpg(getpgrp(), SIGTERM);
 			break;
 		}
 
@@ -115,7 +164,6 @@ int main(){
 
 
 			for(;;){
-				pid_t dead_child;
 				dead_child = wait(NULL);
 				if (dead_child == kidpid)
 				{
@@ -134,7 +182,7 @@ int main(){
 		}
 	}
 	//kill(getpid(), SIGTERM);
-	printf("\np2 Terminated\n");
+	printf("p2 Terminated\n");
 	return 0;
 }
 
@@ -150,16 +198,17 @@ parse()
 */ 
 int parse(){
 
+	int word_size; //will be used to decide moveForward (seen below)
+	int word_count = 0; 
+	int index = 0; //what index we are on in newargv[]
+
 	//reset w and moveForward
 	memset(w, 0, (STORAGE*MAXITEM));
 	//memset(newargv, 0, (MAXITEM));
 	moveForward = 0;
 
 	
-	int word_size; //will be used to decide moveForward (seen below)
-
-	int word_count = 0; 
-	int index = 0; //what index we are on in newargv[]
+	
 
 	/*pass memory location slots to getword */
 	//if getword returns &, EOF, or newline we want to stop getting words and execute
@@ -193,11 +242,19 @@ int parse(){
 		}
 /* ----------- END REDIRECT FILE LOGIC ------------------- */
 
-/* ------------------- PIPE LOGIC ------------------------ */
+/* ------------------- PIPE LOGIC and amp logic ------------------------ */
 		if(*(w + moveForward) == '|'){
 			moveForward+=2;
 			flag_pipe = index;
+			word_count++;
 			continue;
+		}
+
+		if(*(w + moveForward) == '&'){
+			moveForward+=2;
+			flag_amp = index;
+			//newargv[index] = NULL;
+			return EOF;
 		}
 /* ------------------- END PIPE LOGIC -------------------- */
 
@@ -208,6 +265,7 @@ int parse(){
 
 		newargv[index] = w + moveForward; //set newargv[index] = address of start of word
 		index++; 
+		newargv[index] = NULL;
 		word_size = abs(c);
 		moveForward += word_size + 1;
 		word_count++;
@@ -227,11 +285,12 @@ int openFile(char *locOfWord, char inOrOut){
 
 	int flags;
 	int mode;
+	char *filename = locOfWord;
 
 	flags = O_CREAT | O_RDWR; //if the file doesn't exist, create it
 	mode = S_IRUSR | S_IWUSR; //mode is read write	
 
-	char *filename = locOfWord;
+	
 
 	if((output_fd=open(filename, flags, mode)) < 0){
 		printf("File failed: %s\n", filename);
