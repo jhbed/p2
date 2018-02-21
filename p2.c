@@ -48,6 +48,8 @@ void myHandler(){}
 
 
 int main(){
+	int link_result;
+	int open_result;
 	int words; //the amount of words returned from parse()
 	pid_t kidpid; //variable used to designate the child
 	char *home;
@@ -65,7 +67,7 @@ int main(){
 	for(;;) {
 
 
-        //ask carroll why these have to be in here!!!
+        //ask carroll why these have to be in here - why can't these be declared outside loop...
 		save_stdout = dup(STDOUT_FILENO);
 		save_stdin = dup(STDIN_FILENO);
 		
@@ -73,18 +75,26 @@ int main(){
 		printf("p2: ");
 		words = parse();	
 
-/*----------------------CHECK FOR FLAGS --------------------------*/		
+/*----------------------END CHECK FOR FLAGS AND SPECIAL CASES --------------------------*/		
 		//out flag
 		if(flag_out == 1){
 		
-			openFile(outfile, 'o');
+			if((open_result = openFile(outfile, 'o')) < 0){
+				perror("openFile() function failed");
+				//fflush(stdout);
+
+				//continue;
+			}
 			flag_out = 0;
 		}
 
 		//in flag
 		if(flag_in == 1){
-		
-			openFile(infile, 'i');
+			
+			if((open_result = openFile(infile, 'i')) < 0){
+				perror("openFile(infile, 'i') function failed");
+				
+			}
 			flag_in = 0;
 		}
 			
@@ -134,7 +144,7 @@ int main(){
 		}
 
 		//newline or hashtag
-		if(flag_hashtag > 0 || words == 0){
+		if(flag_hashtag > 0 && words == 0){
 			flag_hashtag = 0;
 			continue;
 		}
@@ -154,17 +164,35 @@ int main(){
 
 			continue;
 		}
-/*----------------------END CHECK FOR FLAGS ----------------------*/
+		//MV logic
+		if(strcmp(newargv[0], "MV") == 0){
+			if(newargv[1] == NULL || newargv[2] == NULL || newargv[3] != NULL){
+				printf("MV error, must have 2 arguments for MV\n");
+			} else {
+				if((link_result = link(newargv[1], newargv[2])) < 0){
+					perror("link ERROR");
+					continue;
+				}
+
+				if((link_result = unlink(newargv[1])) < 0){
+					perror("unlink ERROR");
+				}
+			}
+
+			continue;
+		}
+/*----------------------END CHECK FOR FLAGS AND SPECIAL CASES----------------------*/
 
 		
-/*------------------BEGIN FORK/EXEC PROCESS ----------------------*/
+/*------------------NOTHING SPECIAL ENCOUNTERED - BEGIN FORK/EXEC PROCESS ----------------------*/
+		//(void) fflush(stdout);
 		if(-1 == (kidpid = fork())){ //if fork returns -1 it failed
 			perror("Fork unsuccessful");
 			exit(EXIT_FAILURE);
 		} else if (0 == kidpid) { // if fork returns 0 that means we are the child
 			
 			execvp(newargv[0], newargv);
-			perror("execve");   /* execve() returns only on error */
+			perror("main execve failed in main child proc");   /* execve() returns only on error */
             exit(EXIT_FAILURE);
 
 		} else { // WE ARE THE PARENT, we return the PID of the child we created...
@@ -177,17 +205,22 @@ int main(){
 					break;
 				}
 			}
-			(void) dup2(save_stdin, 0); 
-			(void) dup2(save_stdout, 1); 
+			//restore stdin and stdout to original spots in fd array
+			(void) dup2(save_stdin, STDIN_FILENO); 
+			(void) dup2(save_stdout, STDOUT_FILENO); 
 			(void) close(save_stdout);
 			(void) close(save_stdin);
-			fflush(stdout);
+			//fflush(stdout);
 
 
 			//exit(EXIT_SUCCESS);
 		}
 	}
-	//kill(getpid(), SIGTERM);
+	/*
+	A break statement has been encountered, this means an EOF was encountered on a 0 word line
+	In some odd cases (which should not be encountered) this also could mean there was an error, 
+	where STDIN was never restored to the filedesc spot 0.  
+	*/
 	printf("p2 terminated.\n");
 	return 0;
 }
@@ -293,39 +326,45 @@ int openFile(char *locOfWord, char inOrOut){
 	int mode;
 	char *filename = locOfWord;
 
-	mode = S_IRUSR | S_IRGRP | S_IROTH;//mode is read write		
+	//mode is read write		
 
 	
 
 
 
 	if(inOrOut == 'o'){
-		flags = O_CREAT | O_WRONLY;
+		flags = O_CREAT | O_RDWR;
+		mode = S_IRUSR | S_IRGRP | S_IROTH;
 		if((output_fd=open(filename, flags, mode)) < 0){
 			printf("File failed: %s\n", filename);
 			perror("open failed: ");
-			exit(1);
+			return output_fd;
+			//exit(1);
 		}
 		if((dup_result = dup2(output_fd, STDOUT_FILENO)) < 0){
 			perror("dup2 Error: ");
-			exit(1);
+			//exit(1);
 		}
 	} else {
 		flags = O_CREAT | O_RDONLY;
+		mode = S_IRUSR | S_IRGRP | S_IROTH;
 		if((output_fd=open(filename, flags, mode)) < 0){
 			printf("File failed: %s\n", filename);
-			perror("open failed: ");
-			exit(1);
+			perror("open failed");
+			//exit(1);
+			return output_fd;
 		}
 		if((dup_result = dup2(output_fd, STDIN_FILENO)) < 0){
-			perror("dup2 Error: ");
-			exit(1);
+			printf("%c\n", inOrOut);
+			perror("OpenFile dup2 Error");
+			//exit(1);
+			return dup_result;
 		}
 	}
 
 	if((close_result = close(output_fd)) < 0){
 		perror("Close Error: ");
-		exit(1);
+		//exit(1);
 	} else {
 
 		return close_result;
@@ -351,7 +390,7 @@ int startPipe(int index){ //index designates the arg after the '|'
     int dup2_result;
     char *arg_loc;
 
-
+    (void) fflush(stdout);
     if((child = fork()) < 0){
 
     	perror("1st Fork Failure: ");
@@ -377,7 +416,7 @@ int startPipe(int index){ //index designates the arg after the '|'
             newargv[index] = NULL;
             execvp(newargv[0], newargv);
 
-            perror("exec 1 ");
+            perror("pipe exec 1");
 
         } else { // parent - do not wait
             //parent is reading from PIPE
@@ -392,7 +431,7 @@ int startPipe(int index){ //index designates the arg after the '|'
             //printf("executing 2nd, should be tr %s\n", newargv[index]);
 
             execvp(newargv[index], newargv+index);
-            perror("exec 2 ");
+            perror("pipe exec 2");
             //execvp(filedes[1])
             //doing something with the WRITE side of pipe
 
@@ -410,8 +449,9 @@ int startPipe(int index){ //index designates the arg after the '|'
         }
 
     }
-    (void) dup2(save_stdin, 0); 
-    (void) dup2(save_stdout, 1); 
+    //restore stdin and stdout to original spots in fd array
+    (void) dup2(save_stdin, STDIN_FILENO); 
+    (void) dup2(save_stdout, STDOUT_FILENO);  
     (void) close(save_stdout);
     (void) close(save_stdin);
     return 0;
