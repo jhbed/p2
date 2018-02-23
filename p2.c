@@ -12,7 +12,7 @@ This file contains 4 functions:
  - startPipe() - performs necessary pipeline operations when '|' is encountered
   
 */
-
+/*Laptop Working Dev*/
 /*Includes two functions: parse() and main()*/
 
 #include "p2.h"
@@ -78,18 +78,7 @@ int main(){
 
 /*----------------------CHECK FOR FLAGS --------------------------*/		
 		//out flag
-		if(flag_out == 1){
-		
-			openFile(outfile, 'o');
-			flag_out = 0;
-		}
 
-		//in flag
-		if(flag_in == 1){
-		
-			openFile(infile, 'i');
-			flag_in = 0;
-		}
 			
 		//pipe
 		if (flag_pipe != 0) {
@@ -188,6 +177,19 @@ int main(){
 			perror("Fork unsuccessful");
 			exit(EXIT_FAILURE);
 		} else if (0 == kidpid) { // if fork returns 0 that means we are the child
+
+			if(flag_out == 1){
+			
+				openFile(outfile, 'o');
+				flag_out = 0;
+			}
+
+			//in flag
+			if(flag_in == 1){
+			
+				openFile(infile, 'i');
+				flag_in = 0;
+			}
 			
 			execvp(newargv[0], newargv);
 			perror("execve");   /* execve() returns only on error */
