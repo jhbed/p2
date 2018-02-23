@@ -48,6 +48,8 @@ void myHandler(){}
 
 
 int main(){
+	int link_result;
+	int open_result;
 	int words; //the amount of words returned from parse()
 	pid_t kidpid; //variable used to designate the child
 	char *home;
@@ -66,6 +68,7 @@ int main(){
 
 
         //ask carroll why these have to be in here!!!
+        //don't do this!!!
 		save_stdout = dup(STDOUT_FILENO);
 		save_stdin = dup(STDIN_FILENO);
 		
@@ -95,36 +98,36 @@ int main(){
 		    continue; //SKIP FORK EXEC IN MAIN SINCE WE DO IT IN startPipe()
 		}
 
-		if(flag_amp != 0){
-			//AMP LOGIC
-			//(void) fflush(stdout);
-			if(-1 == (kidpid = fork())){ //if fork returns -1 it failed
-				perror("& Fork unsuccessful");
-				exit(EXIT_FAILURE);
+		// if(flag_amp != 0){
+		// 	//AMP LOGIC
+		// 	//(void) fflush(stdout);
+		// 	if(-1 == (kidpid = fork())){ //if fork returns -1 it failed
+		// 		perror("& Fork unsuccessful");
+		// 		exit(EXIT_FAILURE);
 
-			} else if(kidpid == 0) { //CHILD
-				//(void) fflush(stdout);
-				execvp(newargv[0], newargv);
-				perror("execvp error with & process: ");   /* execve() returns only on error */
-				exit(EXIT_FAILURE);
+		// 	} else if(kidpid == 0) { //CHILD
+		// 		//(void) fflush(stdout);
+		// 		execvp(newargv[0], newargv);
+		// 		perror("execvp error with & process: ");    execve() returns only on error 
+		// 		exit(EXIT_FAILURE);
 
-			} else { //PARENT
-				//this is getting printed when it should not be getting printed
-				// for(;;){
+		// 	} else { //PARENT
+		// 		//this is getting printed when it should not be getting printed
+		// 		// for(;;){
 					
-				// 	dead_child = wait(NULL);
-				// 	if (dead_child == kidpid)
-				// 	{
-				// 		break;
-				// 	}
-				// }
-				printf("%s [%d]\n", newargv[0], kidpid);
+		// 		// 	dead_child = wait(NULL);
+		// 		// 	if (dead_child == kidpid)
+		// 		// 	{
+		// 		// 		break;
+		// 		// 	}
+		// 		// }
+		// 		printf("%s [%d]\n", newargv[0], kidpid);
 
 
-			}
-			flag_amp = 0;
-			continue;
-		}
+		// 	}
+		// 	flag_amp = 0;
+		// 	continue;
+		// }
 
 
 		//EOF and no words
@@ -154,10 +157,33 @@ int main(){
 
 			continue;
 		}
-/*----------------------END CHECK FOR FLAGS ----------------------*/
+
+
+		//MV logic
+		if(strcmp(newargv[0], "MV") == 0){
+			if(newargv[1] == NULL || newargv[2] == NULL || newargv[3] != NULL){
+				printf("MV error, must have 2 arguments for MV\n");
+			} else {
+				if((link_result = link(newargv[1], newargv[2])) < 0){
+					perror("link ERROR");
+					continue;
+				}
+
+				if((link_result = unlink(newargv[1])) < 0){
+					perror("unlink ERROR");
+				}
+			}
+
+			continue;
+		}
+		/*----------------------END CHECK FOR FLAGS AND SPECIAL CASES----------------------*/
+
+
+
 
 		
 /*------------------BEGIN FORK/EXEC PROCESS ----------------------*/
+		(void) fflush(stdout);
 		if(-1 == (kidpid = fork())){ //if fork returns -1 it failed
 			perror("Fork unsuccessful");
 			exit(EXIT_FAILURE);
@@ -169,19 +195,26 @@ int main(){
 
 		} else { // WE ARE THE PARENT, we return the PID of the child we created...
 
-
-			for(;;){
-				dead_child = wait(NULL);
-				if (dead_child == kidpid)
-				{
-					break;
+			if(flag_amp == 0){
+				for(;;){
+					dead_child = wait(NULL);
+					if (dead_child == kidpid)
+					{
+						break;
+					}
 				}
 			}
-			(void) dup2(save_stdin, 0); 
-			(void) dup2(save_stdout, 1); 
+
+			if(flag_amp != 0){
+				printf("%s [%d]\n", newargv[0], kidpid);
+				flag_amp = 0;
+			}
+		
+			(void) dup2(save_stdin, STDIN_FILENO); 
+			(void) dup2(save_stdout, STDOUT_FILENO); 
 			(void) close(save_stdout);
 			(void) close(save_stdin);
-			fflush(stdout);
+			//fflush(stdout);
 
 
 			//exit(EXIT_SUCCESS);
@@ -258,9 +291,9 @@ int parse(){
 
 		if(*(w + moveForward) == '&'){
 			moveForward+=2;
-			flag_amp = index;
+			flag_amp = index; //*********************could be where problems are coming from
 			//newargv[index] = NULL;
-			return EOF;
+			return word_count;
 		}
 /* ------------------- END PIPE LOGIC -------------------- */
 
@@ -293,14 +326,14 @@ int openFile(char *locOfWord, char inOrOut){
 	int mode;
 	char *filename = locOfWord;
 
-	mode = S_IRUSR | S_IRGRP | S_IROTH;//mode is read write		
+	mode = S_IRUSR | S_IRGRP | S_IROTH;//should be read write user		
 
 	
 
 
 
 	if(inOrOut == 'o'){
-		flags = O_CREAT | O_WRONLY;
+		flags = O_CREAT | O_WRONLY; // maybe use O_EXCL
 		if((output_fd=open(filename, flags, mode)) < 0){
 			printf("File failed: %s\n", filename);
 			perror("open failed: ");
@@ -311,7 +344,7 @@ int openFile(char *locOfWord, char inOrOut){
 			exit(1);
 		}
 	} else {
-		flags = O_CREAT | O_RDONLY;
+		flags = O_RDONLY;
 		if((output_fd=open(filename, flags, mode)) < 0){
 			printf("File failed: %s\n", filename);
 			perror("open failed: ");
