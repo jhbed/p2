@@ -335,14 +335,14 @@ int openFile(char *locOfWord, char inOrOut){
 	char *filename = locOfWord;
 
 	//mode is read write		
-
+	mode = S_IRUSR | S_IWUSR;
 	
 
 
 
 	if(inOrOut == 'o'){
-		flags = O_CREAT | O_RDWR;
-		mode = S_IRUSR | S_IRGRP | S_IROTH;
+		flags = O_CREAT | O_WRONLY | O_EXCL;
+		
 		if((output_fd=open(filename, flags, mode)) < 0){
 			printf("File failed: %s\n", filename);
 			perror("open failed: ");
@@ -354,8 +354,8 @@ int openFile(char *locOfWord, char inOrOut){
 			//exit(1);
 		}
 	} else {
-		flags = O_CREAT | O_RDONLY;
-		mode = S_IRUSR | S_IRGRP | S_IROTH;
+		flags = O_RDONLY;
+		
 		if((output_fd=open(filename, flags, mode)) < 0){
 			printf("File failed: %s\n", filename);
 			perror("open failed");
