@@ -12,7 +12,7 @@ This file contains 4 functions:
  - startPipe() - performs necessary pipeline operations when '|' is encountered
   
 */
-
+/*DEV BRANCH*/
 /*Includes two functions: parse() and main()*/
 
 #include "p2.h"
@@ -39,9 +39,6 @@ int flag_in = 0; //will be switched to 1 if '<' encountered
 int flag_hashtag = 0;
 char *infile;//will eventually point to a position in our buffer if an infile is established
 pid_t dead_child;
-int save_stdout;
-int save_stdin;
-
 
 
 void myHandler(){}
@@ -53,6 +50,8 @@ int main(){
 	int words; //the amount of words returned from parse()
 	pid_t kidpid; //variable used to designate the child
 	char *home;
+	int dev_null;
+	
 	home = getenv("HOME");
 
 	
@@ -68,73 +67,54 @@ int main(){
 
 
         //ask carroll why these have to be in here - why can't these be declared outside loop...
-		save_stdout = dup(STDOUT_FILENO);
-		save_stdin = dup(STDIN_FILENO);
 		
 		memset(w, 0, (STORAGE*MAXITEM));
 		printf("p2: ");
+		flag_in = 0;
+		flag_out = 0;
+		flag_pipe = 0;
+		flag_amp = 0;
+		flag_hashtag = 0;
 		words = parse();	
-
-/*----------------------END CHECK FOR FLAGS AND SPECIAL CASES --------------------------*/		
-		//out flag
-		if(flag_out == 1){
-		
-			if((open_result = openFile(outfile, 'o')) < 0){
-				perror("openFile() function failed");
-				//fflush(stdout);
-
-				//continue;
-			}
-			flag_out = 0;
-		}
-
-		//in flag
-		if(flag_in == 1){
-			
-			if((open_result = openFile(infile, 'i')) < 0){
-				perror("openFile(infile, 'i') function failed");
-				
-			}
-			flag_in = 0;
-		}
+	
 			
 		//pipe
 		if (flag_pipe != 0) {
 		    (void) startPipe(flag_pipe);
-		    flag_pipe = 0;
+		    
 		    continue; //SKIP FORK EXEC IN MAIN SINCE WE DO IT IN startPipe()
 		}
 
-		if(flag_amp != 0){
-			//AMP LOGIC
-			//(void) fflush(stdout);
-			if(-1 == (kidpid = fork())){ //if fork returns -1 it failed
-				perror("& Fork unsuccessful");
-				exit(EXIT_FAILURE);
+		// if(flag_amp != 0){
+		// 	//AMP LOGIC
+		// 	//(void) fflush(stdout);
+		// 	if(-1 == (kidpid = fork())){ //if fork returns -1 it failed
+		// 		perror("& Fork unsuccessful");
+		// 		exit(EXIT_FAILURE);
 
-			} else if(kidpid == 0) { //CHILD
-				//(void) fflush(stdout);
-				execvp(newargv[0], newargv);
-				perror("execvp error with & process: ");   /* execve() returns only on error */
-				exit(EXIT_FAILURE);
+		// 	} else if(kidpid == 0) { //CHILD
+		// 		//(void) fflush(stdout);
+		// 		execvp(newargv[0], newargv);
+		// 		perror("execvp error with & process: ");    execve() returns only on error 
+		// 		exit(EXIT_FAILURE);
 
-			} else { //PARENT
-				//this is getting printed when it should not be getting printed
-				// for(;;){
+		// 	} else { //PARENT
+		// 		//this is getting printed when it should not be getting printed
+		// 		// for(;;){
 					
-				// 	dead_child = wait(NULL);
-				// 	if (dead_child == kidpid)
-				// 	{
-				// 		break;
-				// 	}
-				// }
-				printf("%s [%d]\n", newargv[0], kidpid);
+		// 		// 	dead_child = wait(NULL);
+		// 		// 	if (dead_child == kidpid)
+		// 		// 	{
+		// 		// 		break;
+		// 		// 	}
+		// 		// }
+		// 		printf("%s [%d]\n", newargv[0], kidpid);
 
 
-			}
-			flag_amp = 0;
-			continue;
-		}
+		// 	}
+		// 	flag_amp = 0;
+		// 	continue;
+		// }
 
 
 		//EOF and no words
@@ -144,10 +124,8 @@ int main(){
 		}
 
 		//newline or hashtag
-		if(flag_hashtag > 0 && words == 0){
-			flag_hashtag = 0;
+		if(flag_hashtag > 0 && words == 0)
 			continue;
-		}
 
 			
 
@@ -185,11 +163,45 @@ int main(){
 
 		
 /*------------------NOTHING SPECIAL ENCOUNTERED - BEGIN FORK/EXEC PROCESS ----------------------*/
-		//(void) fflush(stdout);
-		if(-1 == (kidpid = fork())){ //if fork returns -1 it failed
+		if(flag_amp == 0){
+			(void) fflush(stdout);
+			(void) fflush(stderr);
+		}
+ 		if(-1 == (kidpid = fork())){ //if fork returns -1 it failed
 			perror("Fork unsuccessful");
 			exit(EXIT_FAILURE);
 		} else if (0 == kidpid) { // if fork returns 0 that means we are the child
+
+
+			//check for infile/outfile flags set from parse so we know where to read/write
+			//out flag
+			if(flag_out == 1){
+			
+				if((open_result = openFile(outfile, 'o')) < 0){
+					perror("openFile() function failed");
+					//fflush(stdout);
+
+					//continue;
+				}
+				
+			}
+
+			//in flag
+			if(flag_in == 1){
+				
+				if((open_result = openFile(infile, 'i')) < 0){
+					perror("openFile(infile, 'i') function failed");
+					
+				}
+				
+			}
+
+
+			if(flag_in == 0){
+				//dev_null = open("/dev/null", O_WRONLY);
+				//(void) dup2(dev_null, STDIN_FILENO);
+				//(void) close(dev_null);
+			}
 			
 			execvp(newargv[0], newargv);
 			perror("main execve failed in main child proc");   /* execve() returns only on error */
@@ -197,22 +209,17 @@ int main(){
 
 		} else { // WE ARE THE PARENT, we return the PID of the child we created...
 
-
-			for(;;){
-				dead_child = wait(NULL);
-				if (dead_child == kidpid)
-				{
-					break;
+			if(flag_amp == 0){
+				for(;;){
+					dead_child = wait(NULL);
+					if (dead_child == kidpid)
+					{
+						break;
+					}
 				}
+			} else{
+				printf("%s [%d]\n", newargv[0], kidpid);
 			}
-			//restore stdin and stdout to original spots in fd array
-			(void) dup2(save_stdin, STDIN_FILENO); 
-			(void) dup2(save_stdout, STDOUT_FILENO); 
-			(void) close(save_stdout);
-			(void) close(save_stdin);
-			//fflush(stdout);
-
-
 			//exit(EXIT_SUCCESS);
 		}
 	}
@@ -240,6 +247,7 @@ int parse(){
 	int word_size; //will be used to decide moveForward (seen below)
 	int word_count = 0; 
 	int index = 0; //what index we are on in newargv[]
+
 
 	//reset w and moveForward
 	
@@ -293,7 +301,7 @@ int parse(){
 			moveForward+=2;
 			flag_amp = index;
 			//newargv[index] = NULL;
-			return EOF;
+			return word_count;
 		}
 /* ------------------- END PIPE LOGIC -------------------- */
 
@@ -382,19 +390,50 @@ startPipe(int index)
  
 */
 int startPipe(int index){ //index designates the arg after the '|'
-
+	int open_result;
     int pipe_result;
     int filedes[2];
     pid_t child;
     pid_t gc; //grand child
     int dup2_result;
     char *arg_loc;
-
+    (void) fflush(stderr);
     (void) fflush(stdout);
     if((child = fork()) < 0){
 
     	perror("1st Fork Failure: ");
     } else if(child == 0) { //child
+
+
+    	//check for the in/outfile flags here. we may want to do this in
+    	//the grandchild instead
+
+
+    	if(flag_out == 1){
+    	
+    		if((open_result = openFile(outfile, 'o')) < 0){
+    			perror("openFile() function failed");
+    			//fflush(stdout);
+
+    			//continue;
+    		}
+    		
+    	}
+
+    	//in flag
+    	if(flag_in == 1){
+    		(void) fflush(stderr);
+   			(void) fflush(stdout);
+    		if((open_result = openFile(infile, 'i')) < 0){
+    			perror("openFile(infile, 'i') function failed");
+    			
+    		}
+    		
+    	}
+
+
+
+
         //start pipe
         //filedes[1] is write to pipe
         //filedes[0] is read from pipe (think like reading from stdin)
@@ -450,12 +489,7 @@ int startPipe(int index){ //index designates the arg after the '|'
 
     }
     //restore stdin and stdout to original spots in fd array
-    (void) dup2(save_stdin, STDIN_FILENO); 
-    (void) dup2(save_stdout, STDOUT_FILENO);  
-    (void) close(save_stdout);
-    (void) close(save_stdin);
     return 0;
-
 }
 
 
